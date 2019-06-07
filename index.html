@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<meta charset="utf-8">
+</head>
+<body>
+<textarea></textarea>
+<button>Сгенерировать</button>
+
+<script>
+	var data = []
+
+	function write(byte) {
+		data.push(byte)
+	}
+
+	function mov_ax_number(number) {
+		write(0xb8)
+		write(number & 0xff)
+		write((number >> 8) & 0xff)
+	}
+
+	function mov_mem_ds_ax(address) {
+		write(0x3e)
+		write(0xa3)
+		write(address & 0xff)
+		write((address >> 8) & 0xff)
+	}
+
+	function mov_ds_ax(address) {
+		write(0x8E)
+		write(0xD8)
+	}
+
+	function forever() {
+		write(0xeb)
+		write(0xfe)
+	}
+
+	function generate_code(data) {
+		var encoder = {
+			previouse_byte: 0,
+			position: 2,
+			output: '',
+			write_byte: function(t, byte) {
+				console.log('write')
+				encoder.output += byte
+			}
+		}
+
+
+		function convert_byte_to_base64(byte)
+		{
+		    if(byte < 26)
+		        return String.fromCharCode(byte + 'A'.charCodeAt());
+
+		    if(byte < 52)
+		        return String.fromCharCode(byte + 'a'.charCodeAt() - 26);
+
+		    if(byte < 62)
+		        return String.fromCharCode(byte + '0'.charCodeAt() - 52);
+
+		    if(byte == 62)
+		        return String.fromCharCode('+'.charCodeAt());
+
+		    return '/';
+		}
+
+		function encode_base64(byte)
+		{
+		    encoder.write_byte(encoder.output, convert_byte_to_base64( (byte >> encoder.position) | encoder.previouse_byte) );
+		    encoder.previouse_byte = (byte & (0b00111111 >> (6 - encoder.position))) << (6 - encoder.position);
+
+		    if(encoder.position == 6)
+		    {
+		        encoder.write_byte(encoder.output, convert_byte_to_base64(encoder.previouse_byte));
+		        encoder.position = 2;
+		        encoder.previouse_byte = 0;
+		    }
+		    else
+		        encoder.position = encoder.position + 2;
+		}
+
+
+		function end_base64_encoder()
+		{
+		    if(encoder.position != 2)
+		    {
+		        encoder.write_byte(encoder.output, convert_byte_to_base64(encoder.previouse_byte));
+
+		        if(encoder.position == 4)
+		        {
+		            encoder.write_byte(encoder.output, '=');
+		            encoder.write_byte(encoder.output, '=');
+		        }
+		        else
+		            encoder.write_byte(encoder.output, '=');
+		    }
+		}
+
+		//var b64 = Buffer.from(u8).toString('base64')
+		//data:text/csv;base64,${btoa(unescape(encodeURIComponent(JSON.stringify(value.components))))}
+
+		data.forEach(byte => {
+			encode_base64(byte)
+		})
+		end_base64_encoder()
+
+		var base64_data = encoder.output
+
+		return 'data:text/csv;base64,' + base64_data
+	}
+
+	var textarea = document.body.querySelector('textarea')
+	with(textarea.style) {
+		width = '640px'
+		height = '480px'
+	}
+	textarea.value = `mov_ax_number(0xb800)
+mov_ds_ax()
+
+mov_ax_number(0x0700 + 'H'.charCodeAt())
+mov_mem_ds_ax(0x0000)
+
+mov_ax_number(0x0700 + 'i'.charCodeAt())
+mov_mem_ds_ax(0x0002)
+
+forever()`
+
+	var generate_button = document.querySelector('button')
+	generate_button.onclick = event => {
+		var code = textarea.value
+		window.eval(code)
+
+		while(data.length < 510) {
+			write(0)
+		}
+
+		write(0x55)
+		write(0xaa)
+
+		console.log(data)
+
+		var code = generate_code(data)
+		console.log(code)
+		window.open(code)
+		data = []
+	}
+
+</script>
+</body>
+</html>
